@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 async-openai = "0.18.1"
 axum = "0.7.4"
+axum_thiserror = "0.1.0"
 chrono = { version = "0.4.32", features = ["serde"] }
 color-eyre = "0.6.2"
 dotenvy = "0.15.7"

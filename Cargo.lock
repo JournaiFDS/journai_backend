@@ -161,6 +161,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "axum_thiserror"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0868fb225cf8849a294385dc6f09b68ffe72c9e854e486d1a7cca2b93700bd73"
+dependencies = [
+ "axum",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.48",
+ "thiserror",
+]
+
+[[package]]
 name = "backoff"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1060,6 +1073,7 @@ version = "0.1.0"
 dependencies = [
  "async-openai",
  "axum",
+ "axum_thiserror",
  "chrono",
  "color-eyre",
  "dotenvy",

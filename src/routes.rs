@@ -1,18 +1,18 @@
-use std::{fmt::Debug, sync::Arc};
+use std::fmt::Debug;
 
 use async_openai::{
-    config::OpenAIConfig,
+    error::OpenAIError,
     types::{
-        ChatCompletionRequestMessage, ChatCompletionRequestSystemMessage,
-        ChatCompletionRequestSystemMessageArgs, ChatCompletionRequestUserMessageArgs,
-        CreateChatCompletionRequestArgs, CreateCompletionRequest, CreateCompletionRequestArgs,
-        Role,
+        ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
+        ChatCompletionRequestUserMessageArgs, CreateChatCompletionRequestArgs,
     },
     Client,
 };
-use axum::{extract, http::StatusCode, Extension, Json};
+use axum::{extract, http::StatusCode, Json};
+use axum_thiserror::ErrorStatus;
 use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct JournalEntry {
@@ -27,9 +27,22 @@ pub struct CreateJournalEntry {
     pub summary: String,
 }
 
+#[derive(Error, Debug, ErrorStatus)]
+pub enum CreateJournalEntryError {
+    #[error(transparent)]
+    #[status(StatusCode::INTERNAL_SERVER_ERROR)]
+    OpenAI(OpenAIError),
+    #[error("no output from GPT-4")]
+    #[status(StatusCode::INTERNAL_SERVER_ERROR)]
+    NoOutput,
+    #[error(transparent)]
+    #[status(StatusCode::INTERNAL_SERVER_ERROR)]
+    Serialization(serde_json::Error),
+}
+
 pub async fn new_journal_entry(
     journal_entry: extract::Json<CreateJournalEntry>,
-) -> Result<Json<JournalEntry>, (StatusCode, String)> {
+) -> Result<Json<JournalEntry>, CreateJournalEntryError> {
     let r = Client::new()
         .chat()
         .create(
@@ -40,7 +53,7 @@ pub async fn new_journal_entry(
                         ChatCompletionRequestSystemMessageArgs::default()
                             .content(include_str!("./journal_entry_message.txt"))
                             .build()
-                            .unwrap(),
+                            .map_err(CreateJournalEntryError::OpenAI)?,
                     ),
                     ChatCompletionRequestMessage::User(
                         ChatCompletionRequestUserMessageArgs::default()
@@ -51,39 +64,25 @@ pub async fn new_journal_entry(
                                 journal_entry.summary
                             ))
                             .build()
-                            .unwrap(),
+                            .map_err(CreateJournalEntryError::OpenAI)?,
                     ),
                 ])
                 .n(1)
                 .build()
-                .map_err(|_| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to build OpenAI prompt.".to_string(),
-                    )
-                })?,
+                .map_err(CreateJournalEntryError::OpenAI)?,
         )
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("{:?}", e)))?;
+        .map_err(CreateJournalEntryError::OpenAI)?;
 
-    let json = match r
+    let json = r
         .choices
         .get(0)
         .map(|o| o.message.clone().content)
         .flatten()
-    {
-        Some(message) => Ok(message),
-        None => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "No output from GPT.".to_string(),
-        )),
-    };
+        .ok_or(CreateJournalEntryError::NoOutput)?;
 
-    match serde_json::from_str::<JournalEntry>(&json?) {
-        Ok(entry) => Ok(Json(entry)),
-        Err(_) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to serialize GPT's output.".to_string(),
-        )),
-    }
+    let json = serde_json::from_str::<JournalEntry>(&json)
+        .map_err(CreateJournalEntryError::Serialization)?;
+
+    Ok(Json(json))
 }
