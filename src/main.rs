@@ -1,11 +1,15 @@
 pub mod routes;
 
-use std::{borrow::BorrowMut, sync::Arc};
+use std::sync::Arc;
 
-use axum::{routing::post, Extension, Router};
+use axum::{routing::get, Extension, Router};
 use color_eyre::eyre::Ok;
-use mongodb::{options::ClientOptions, Client};
-use routes::{new_journal_entry, JournalEntry};
+use mongodb::{
+    bson::doc,
+    options::{ClientOptions, IndexOptions},
+    Client, IndexModel,
+};
+use routes::{create_journal_entry, delete_journal_entry, list_journal_entries, JournalEntry};
 use tokio::net::TcpListener;
 use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter};
 
@@ -23,10 +27,26 @@ async fn main() -> color_eyre::Result<()> {
     let mut options = ClientOptions::parse(std::env::var("MONGO")?).await?;
     options.app_name = Some("Journai".to_string());
     let mongo_client = Arc::new(Client::with_options(options)?);
-    let database: Arc<mongodb::Database> = Arc::new(mongo_client.database("journai"));
+    let database = Arc::new(mongo_client.database("journai"));
     let entries_collection = Arc::new(database.collection::<JournalEntry>("entries"));
+    entries_collection
+        .create_index(
+            IndexModel::builder()
+                .keys(doc! { "date": 1 })
+                .options(IndexOptions::builder().unique(true).build())
+                .build(),
+            None,
+        )
+        .await?;
 
-    let app = Router::new().route("/", post(new_journal_entry));
+    let app = Router::new()
+        .route(
+            "/",
+            get(list_journal_entries)
+                .post(create_journal_entry)
+                .delete(delete_journal_entry),
+        )
+        .layer(Extension(entries_collection));
 
     let listener = TcpListener::bind(format!(
         "{}:{}",
