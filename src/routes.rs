@@ -10,9 +10,10 @@ use async_openai::{
 };
 use axum::{extract, http::StatusCode, Extension, Json};
 use axum_thiserror::ErrorStatus;
-use chrono::{NaiveDate, Utc};
+use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone, Utc};
+use chrono_tz::Europe::Paris;
 use futures_util::TryStreamExt;
-use mongodb::{bson::doc, Collection};
+use mongodb::{bson::doc, options::UpdateModifications, Collection};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -27,6 +28,7 @@ pub struct JournalEntry {
 pub struct CreateJournalEntry {
     pub name: String,
     pub summary: String,
+    pub date: NaiveDate,
 }
 
 #[derive(Error, Debug, ErrorStatus)]
@@ -41,8 +43,8 @@ pub enum CreateJournalEntryError {
     #[status(StatusCode::INTERNAL_SERVER_ERROR)]
     Serialization(serde_json::Error),
     #[error(transparent)]
-    #[status(StatusCode::CONFLICT)]
-    EntryAlreadyExists(mongodb::error::Error),
+    #[status(StatusCode::INTERNAL_SERVER_ERROR)]
+    Mongo(mongodb::error::Error),
 }
 
 pub async fn create_journal_entry(
@@ -59,9 +61,7 @@ pub async fn create_journal_entry(
         ChatCompletionRequestUserMessageArgs::default()
             .content(format!(
                 "{} ({}): {}",
-                journal_entry.name,
-                Utc::now().date_naive(),
-                journal_entry.summary
+                journal_entry.name, journal_entry.date, journal_entry.summary
             ))
             .build()
             .map_err(CreateJournalEntryError::OpenAI)?,
@@ -89,10 +89,25 @@ pub async fn create_journal_entry(
     let json = serde_json::from_str::<JournalEntry>(&json)
         .map_err(CreateJournalEntryError::Serialization)?;
 
-    mongo_entries
-        .insert_one(json.clone(), None)
-        .await
-        .map_err(CreateJournalEntryError::EntryAlreadyExists)?;
+    if let Err(_) = mongo_entries.insert_one(json.clone(), None).await {
+        let date = Paris
+            .from_local_datetime(&json.date.and_hms_opt(0, 0, 0).unwrap())
+            .unwrap();
+
+        mongo_entries
+            .update_one(
+                doc! { "date": date },
+                doc! {
+                    "$set": {
+                        "short_summary": json.short_summary.clone(),
+                        "rate": json.rate.clone()
+                    }
+                },
+                None,
+            )
+            .await
+            .map_err(CreateJournalEntryError::Mongo)?;
+    }
 
     Ok(Json(json))
 }
