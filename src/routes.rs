@@ -10,10 +10,10 @@ use async_openai::{
 };
 use axum::{extract, http::StatusCode, Extension, Json};
 use axum_thiserror::ErrorStatus;
-use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone, Utc};
+use chrono::{NaiveDate, TimeZone};
 use chrono_tz::Europe::Paris;
 use futures_util::TryStreamExt;
-use mongodb::{bson::doc, options::UpdateModifications, Collection};
+use mongodb::{bson::doc, Collection};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
