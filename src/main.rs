@@ -42,9 +42,9 @@ async fn main() -> color_eyre::Result<()> {
 
     let cors = CorsLayer::new()
         // allow `GET` and `POST` when accessing the resource
-        .allow_methods([Method::GET, Method::POST])
-        // allow requests from any origin
-        .allow_origin(Any);
+        .allow_methods(Any)
+        .allow_origin(Any)
+        .allow_headers(Any);
 
     let app = Router::new()
         .route(
