@@ -2,7 +2,7 @@ pub mod routes;
 
 use std::sync::Arc;
 
-use axum::{http::Method, routing::get, Extension, Router};
+use axum::{routing::get, Extension, Router};
 use color_eyre::eyre::Ok;
 use mongodb::{
     bson::doc,
@@ -41,7 +41,6 @@ async fn main() -> color_eyre::Result<()> {
         .await?;
 
     let cors = CorsLayer::new()
-        // allow `GET` and `POST` when accessing the resource
         .allow_methods(Any)
         .allow_origin(Any)
         .allow_headers(Any);

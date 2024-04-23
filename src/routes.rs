@@ -22,6 +22,7 @@ pub struct JournalEntry {
     pub date: NaiveDate,
     pub rate: f32,
     pub short_summary: String,
+    pub tags: Vec<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -100,7 +101,8 @@ pub async fn create_journal_entry(
                 doc! {
                     "$set": {
                         "short_summary": json.short_summary.clone(),
-                        "rate": json.rate.clone()
+                        "rate": json.rate.clone(),
+                        "tags": json.tags.clone()
                     }
                 },
                 None,
