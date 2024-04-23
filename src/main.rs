@@ -2,7 +2,7 @@ pub mod routes;
 
 use std::sync::Arc;
 
-use axum::{routing::get, Extension, Router};
+use axum::{http::Method, routing::get, Extension, Router};
 use color_eyre::eyre::Ok;
 use mongodb::{
     bson::doc,
@@ -11,6 +11,7 @@ use mongodb::{
 };
 use routes::{create_journal_entry, delete_journal_entry, list_journal_entries, JournalEntry};
 use tokio::net::TcpListener;
+use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter};
 
 #[tokio::main]
@@ -39,6 +40,12 @@ async fn main() -> color_eyre::Result<()> {
         )
         .await?;
 
+    let cors = CorsLayer::new()
+        // allow `GET` and `POST` when accessing the resource
+        .allow_methods([Method::GET, Method::POST])
+        // allow requests from any origin
+        .allow_origin(Any);
+
     let app = Router::new()
         .route(
             "/",
@@ -46,7 +53,8 @@ async fn main() -> color_eyre::Result<()> {
                 .post(create_journal_entry)
                 .delete(delete_journal_entry),
         )
-        .layer(Extension(entries_collection));
+        .layer(Extension(entries_collection))
+        .layer(cors);
 
     let listener = TcpListener::bind(format!(
         "{}:{}",
